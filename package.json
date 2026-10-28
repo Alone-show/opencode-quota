@@ -1,0 +1,51 @@
+{
+  "name": "dsh-opencode-quota",
+  "version": "1.0.0",
+  "type": "module",
+  "description": "DSH 插件：在 Web 界面右下角实时显示 OpenCode Go 的 5 小时 / 本周 / 本月额度。",
+  "keywords": [
+    "dsh",
+    "deepseek-harness",
+    "dsh-plugin",
+    "opencode",
+    "opencode-go",
+    "quota",
+    "usage"
+  ],
+  "license": "MIT",
+  "exports": {
+    ".": "./index.js",
+    "./client": "./client.js",
+    "./locale/*.json": "./locale/*.json",
+    "./icon": "./icon.svg"
+  },
+  "files": [
+    "index.js",
+    "client.js",
+    "cordis.patch.yml",
+    "locale/*.json",
+    "icon.svg",
+    "README.md",
+    "LICENSE"
+  ],
+  "dsh": {
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    },
+    "client": {
+      "platform": "web",
+      "immediately": true,
+      "inject": [
+        "@deepseek-ai/dsh-client-ui-layout"
+      ]
+    }
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Alone-show/opencode-quota.git"
+  },
+  "homepage": "https://github.com/Alone-show/opencode-quota#readme",
+  "bugs": {
+    "url": "https://github.com/Alone-show/opencode-quota/issues"
+  }
+}

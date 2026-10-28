@@ -1,0 +1,9 @@
+# 把 dsh-opencode-quota 挂进 profile 的 Loader。
+#
+# 宿主半侧（index.js）注册只读路由 /plugins/opencode-quota，用它代取
+# opencode.ai 的额度接口（浏览器直接请求会被跨域挡掉，且 API Key 不能下发）。
+# 浏览器半侧（client.js）由 dsh-client-modules 依据 package.json 的
+# dsh.client 声明下发，往 shell.overlay 里挂一个可展开的额度浮窗。
+- insert:
+    - id: opencode-quota
+      name: 'dsh-opencode-quota'
