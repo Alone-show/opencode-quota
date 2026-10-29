@@ -30,6 +30,18 @@ window.__ModuleLoader__.load({
     const POLL_MS = 20000;
     /** 计量窗口的渲染顺序。 */
     const METER_KEYS = ['fiveHour', 'week', 'month'];
+    /** 浮窗不透明度存在浏览器里的 key。 */
+    const OPACITY_KEY = 'dsh-opencode-quota:opacity';
+    /** 不透明度下限：太淡就看不见、也滚不回来了。 */
+    const OPACITY_MIN = 0.25;
+    /** 不透明度上限，也是默认值。 */
+    const OPACITY_MAX = 1;
+    /** 滚轮一档的步进。 */
+    const OPACITY_STEP = 0.05;
+    /** 连续滚动时两次调整的最小间隔，避免触控板一滑到底。 */
+    const WHEEL_THROTTLE_MS = 80;
+    /** 调完透明度后提示条停留多久。 */
+    const OPACITY_HUD_MS = 1200;
 
     const zh = {
       'pill.label': 'OpenCode 额度',
@@ -63,6 +75,9 @@ window.__ModuleLoader__.load({
       'time.days': '{d} 天 {h} 小时',
       'time.hours': '{h} 小时 {m} 分',
       'time.minutes': '{m} 分钟',
+      'opacity.hint': '透明度 {percent}%',
+      'opacity.reset': '恢复默认透明度（100%）',
+      'opacity.wheel': '滚轮调整透明度',
     };
 
     const en = {
@@ -97,17 +112,26 @@ window.__ModuleLoader__.load({
       'time.days': '{d}d {h}h',
       'time.hours': '{h}h {m}m',
       'time.minutes': '{m}m',
+      'opacity.hint': 'Opacity {percent}%',
+      'opacity.reset': 'Reset opacity (100%)',
+      'opacity.wheel': 'Scroll to adjust opacity',
     };
 
     /** 组件内样式：随组件挂载/卸载，不写 document。 */
     const CSS = `
 .ocq-root{position:fixed;right:20px;bottom:20px;z-index:60;display:flex;flex-direction:column;align-items:flex-end;gap:8px;pointer-events:none;font-family:inherit;font-size:12px;line-height:1.45;color:var(--dsw-alias-label-primary)}
 .ocq-root *{box-sizing:border-box}
-.ocq-pill{pointer-events:auto;display:inline-flex;align-items:center;gap:6px;height:28px;padding:0 11px;border-radius:999px;border:1px solid var(--dsw-alias-border-l1);background:var(--dsw-alias-bg-overlay);color:var(--dsw-alias-label-primary);box-shadow:0 6px 18px rgba(0,0,0,.18);cursor:pointer;font:inherit;font-size:12px;font-weight:500;transition:border-color .15s ease,background .15s ease}
+.ocq-pill{pointer-events:auto;display:inline-flex;align-items:center;gap:6px;height:28px;padding:0 11px;border-radius:999px;border:1px solid var(--dsw-alias-border-l1);background:var(--dsw-alias-bg-overlay);color:var(--dsw-alias-label-primary);box-shadow:0 6px 18px rgba(0,0,0,.18);cursor:pointer;font:inherit;font-size:12px;font-weight:500;transition:border-color .15s ease,background .15s ease,opacity .1s linear}
 .ocq-pill:hover{border-color:var(--dsw-alias-border-l2)}
 .ocq-pill:focus-visible{outline:2px solid var(--dsw-alias-brand-primary);outline-offset:2px}
 .ocq-dot{width:7px;height:7px;border-radius:50%;background:var(--ocq-tone);flex:0 0 auto}
-.ocq-panel{pointer-events:auto;width:300px;padding:14px;border-radius:14px;border:1px solid var(--dsw-alias-border-l1);background:var(--dsw-alias-bg-overlay);box-shadow:0 18px 48px rgba(0,0,0,.28);color:var(--dsw-alias-label-primary)}
+.ocq-panel{pointer-events:auto;width:300px;padding:14px;border-radius:14px;border:1px solid var(--dsw-alias-border-l1);background:var(--dsw-alias-bg-overlay);box-shadow:0 18px 48px rgba(0,0,0,.28);color:var(--dsw-alias-label-primary);transition:opacity .1s linear}
+.ocq-hud{position:absolute;right:0;bottom:calc(100% + 6px);display:flex;justify-content:flex-end;pointer-events:none;visibility:hidden;opacity:0;transform:translateY(3px);transition:opacity .15s ease,transform .15s ease,visibility .15s ease}
+.ocq-hud-on{visibility:visible;opacity:1;transform:none}
+.ocq-hud-chip{pointer-events:none;height:22px;padding:0 8px;border-radius:999px;border:1px solid var(--dsw-alias-border-l1);background:var(--dsw-alias-bg-overlay);color:var(--dsw-alias-label-secondary);font:inherit;font-size:11px;font-variant-numeric:tabular-nums;cursor:pointer;box-shadow:0 4px 12px rgba(0,0,0,.18)}
+.ocq-hud-on .ocq-hud-chip{pointer-events:auto}
+.ocq-hud-chip:hover{color:var(--dsw-alias-label-primary);border-color:var(--dsw-alias-border-l2)}
+.ocq-hud-chip:focus-visible{outline:2px solid var(--dsw-alias-brand-primary);outline-offset:1px}
 .ocq-head{display:flex;align-items:flex-start;justify-content:space-between;gap:8px}
 .ocq-head-main{display:flex;align-items:center;gap:7px;min-width:0}
 .ocq-title{font-size:13px;font-weight:600;color:var(--dsw-alias-label-primary);white-space:nowrap}
@@ -139,6 +163,43 @@ window.__ModuleLoader__.load({
     function formatPercent(value) {
       const n = Number.isFinite(value) ? Math.max(0, value) : 0;
       return `${n < 10 ? n.toFixed(1) : Math.round(n)}%`;
+    }
+
+    /**
+     * 把不透明度夹到 [OPACITY_MIN, OPACITY_MAX]，并按步进取两位小数。
+     * @param {number} value 任意数值。
+     * @returns {number} 合法的 0.25–1 之间的值。
+     */
+    function clampOpacity(value) {
+      const n = Number.isFinite(value) ? value : OPACITY_MAX;
+      return Math.min(OPACITY_MAX, Math.max(OPACITY_MIN, Math.round(n * 100) / 100));
+    }
+
+    /**
+     * 读上次记住的不透明度；没有存过、解析失败、隐私模式下都回默认值。
+     * @returns {number} 合法的 0.25–1 之间的值。
+     */
+    function readStoredOpacity() {
+      try {
+        const raw = window.localStorage.getItem(OPACITY_KEY);
+        if (raw === null || raw === '') return OPACITY_MAX;
+        const value = Number(raw);
+        return Number.isFinite(value) ? clampOpacity(value) : OPACITY_MAX;
+      } catch {
+        return OPACITY_MAX;
+      }
+    }
+
+    /**
+     * 记住不透明度；写失败（隐私模式 / 配额满）只影响记忆，不影响当前会话。
+     * @param {number} value 合法的 0.25–1 之间的值。
+     */
+    function persistOpacity(value) {
+      try {
+        window.localStorage.setItem(OPACITY_KEY, String(value));
+      } catch {
+        /* 记忆失败时静默降级 */
+      }
     }
 
     /**
@@ -316,6 +377,71 @@ window.__ModuleLoader__.load({
         const localeId = ctx.locale.getSnapshot().active;
         const t = ctx.locale.bind(NS);
 
+        /** 浮窗不透明度：整块一起淡化，默认 100%。 */
+        const [opacity, setOpacity] = useState(readStoredOpacity);
+        /** 提示条显隐；只在不透明度刚被调整时亮一下。 */
+        const [hudOn, setHudOn] = useState(false);
+        /** wheel 监听 / 定时期里读最新值，避免闭包里的旧 opacity。 */
+        const opacityRef = useRef(opacity);
+        const hudTimerRef = useRef(null);
+
+        /** 提示条亮 OPACITY_HUD_MS，然后自己消失。 */
+        const flashOpacityHud = useCallback(() => {
+          setHudOn(true);
+          if (hudTimerRef.current !== null) window.clearTimeout(hudTimerRef.current);
+          hudTimerRef.current = window.setTimeout(() => {
+            hudTimerRef.current = null;
+            setHudOn(false);
+          }, OPACITY_HUD_MS);
+        }, []);
+
+        /** 按档调整不透明度：滚轮向下（steps 为正）更透明，向上更不透明。 */
+        const applyOpacitySteps = useCallback(
+          (steps) => {
+            const next = clampOpacity(opacityRef.current - steps * OPACITY_STEP);
+            if (next === opacityRef.current) return;
+            opacityRef.current = next;
+            setOpacity(next);
+            persistOpacity(next);
+            flashOpacityHud();
+          },
+          [flashOpacityHud],
+        );
+
+        /** 恢复默认不透明度（点提示条时用）。 */
+        const resetOpacity = useCallback(() => {
+          opacityRef.current = OPACITY_MAX;
+          setOpacity(OPACITY_MAX);
+          persistOpacity(OPACITY_MAX);
+          flashOpacityHud();
+        }, [flashOpacityHud]);
+
+        // 滚轮调不透明度。必须用非被动监听，才能 preventDefault 拦住浮窗底下的页面滚动。
+        useEffect(() => {
+          const root = rootRef.current;
+          if (root === null) return undefined;
+          let lastAdjustAt = 0;
+          const onWheel = (event) => {
+            if (event.ctrlKey || event.metaKey || event.altKey || event.defaultPrevented) return;
+            if (Math.abs(event.deltaY) <= Math.abs(event.deltaX)) return;
+            event.preventDefault();
+            const now = Date.now();
+            if (now - lastAdjustAt < WHEEL_THROTTLE_MS) return;
+            lastAdjustAt = now;
+            applyOpacitySteps(event.deltaY > 0 ? 1 : -1);
+          };
+          root.addEventListener('wheel', onWheel, { passive: false });
+          return () => root.removeEventListener('wheel', onWheel, { passive: false });
+        }, [applyOpacitySteps]);
+
+        // 卸载时清掉提示条定时器。
+        useEffect(
+          () => () => {
+            if (hudTimerRef.current !== null) window.clearTimeout(hudTimerRef.current);
+          },
+          [],
+        );
+
         /** 读取一次额度；force 时让宿主跳过缓存。 */
         const load = useCallback(async (force) => {
           setState((prev) => ({ ...prev, status: prev.payload === null ? 'loading' : 'refreshing' }));
@@ -492,10 +618,25 @@ window.__ModuleLoader__.load({
           'div',
           { className: 'ocq-root', ref: rootRef },
           h('style', null, CSS),
+          h(
+            'div',
+            { className: `ocq-hud${hudOn ? ' ocq-hud-on' : ''}` },
+            h(
+              'button',
+              {
+                type: 'button',
+                className: 'ocq-hud-chip',
+                title: t('opacity.reset'),
+                'aria-label': t('opacity.reset'),
+                onClick: resetOpacity,
+              },
+              t('opacity.hint', { percent: Math.round(opacity * 100) }),
+            ),
+          ),
           open
             ? h(
                 'div',
-                { className: 'ocq-panel', style: toneStyle, role: 'dialog', 'aria-label': pillText },
+                { className: 'ocq-panel', style: { ...toneStyle, opacity }, role: 'dialog', 'aria-label': pillText },
                 h(
                   'div',
                   { className: 'ocq-head' },
@@ -563,8 +704,8 @@ window.__ModuleLoader__.load({
             {
               type: 'button',
               className: 'ocq-pill',
-              style: toneStyle,
-              title: pillHint,
+              style: { ...toneStyle, opacity },
+              title: `${pillHint} · ${t('opacity.wheel')}`,
               'aria-expanded': open ? 'true' : 'false',
               'aria-label': t('action.expand'),
               onClick: () => setOpen((value) => !value),
