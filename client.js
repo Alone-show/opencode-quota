@@ -120,27 +120,16 @@ window.__ModuleLoader__.load({
 .ocq-meters{display:flex;flex-direction:column;gap:11px;margin-top:13px}
 .ocq-meter-head{display:flex;align-items:baseline;justify-content:space-between;gap:8px}
 .ocq-meter-name{font-size:12px;font-weight:500}
-.ocq-meter-value{font-size:11px;color:var(--dsw-alias-label-secondary);font-variant-numeric:tabular-nums}
-.ocq-bar{margin-top:5px;height:6px;border-radius:999px;background:var(--dsw-alias-bg-layer-2);overflow:hidden}
-.ocq-bar-fill{height:100%;border-radius:999px;background:var(--ocq-tone);transition:width .3s ease}
-.ocq-meter-sub{display:flex;align-items:baseline;justify-content:space-between;gap:8px;margin-top:4px;font-size:11px;color:var(--dsw-alias-label-secondary)}
-.ocq-meter-pct{font-variant-numeric:tabular-nums}
+.ocq-meter-pct{font-size:12px;font-weight:500;color:var(--dsw-alias-label-primary);font-variant-numeric:tabular-nums}
+.ocq-bar{position:relative;margin-top:5px;height:6px;border-radius:999px;overflow:hidden;background:linear-gradient(90deg,var(--dsw-alias-state-success-primary) 0%,var(--dsw-alias-state-success-primary) 45%,var(--dsw-alias-state-warn-primary) 75%,var(--dsw-alias-state-error-primary) 100%)}
+.ocq-bar-cover{position:absolute;top:0;bottom:0;right:0;background:var(--dsw-alias-bg-layer-2);transition:left .3s ease}
+.ocq-meter-sub{display:flex;align-items:baseline;justify-content:flex-end;gap:8px;margin-top:4px;font-size:11px;color:var(--dsw-alias-label-secondary)}
 .ocq-foot{display:flex;align-items:center;justify-content:space-between;gap:8px;margin-top:13px;padding-top:10px;border-top:1px solid var(--dsw-alias-border-l1);font-size:11px;color:var(--dsw-alias-label-secondary)}
 .ocq-state{display:flex;flex-direction:column;gap:8px;margin-top:12px;font-size:12px;color:var(--dsw-alias-label-secondary)}
 .ocq-btn{align-self:flex-start;height:26px;padding:0 10px;border-radius:7px;border:1px solid var(--dsw-alias-border-l1);background:var(--dsw-alias-bg-layer-1);color:var(--dsw-alias-label-primary);font:inherit;font-size:11px;cursor:pointer}
 .ocq-btn:hover{border-color:var(--dsw-alias-border-l2)}
 .ocq-btn:focus-visible{outline:2px solid var(--dsw-alias-brand-primary);outline-offset:1px}
 `;
-
-    /**
-     * 金额（美元）。
-     * @param {number} value 美元金额。
-     * @returns {string} `$2.11` 形式。
-     */
-    function formatUsd(value) {
-      const n = Number.isFinite(value) ? value : 0;
-      return `$${n.toFixed(2)}`;
-    }
 
     /**
      * 百分比：小于 10% 保留一位小数，其余取整。
@@ -459,24 +448,19 @@ window.__ModuleLoader__.load({
                   'div',
                   { className: 'ocq-meter-head' },
                   h('span', { className: 'ocq-meter-name' }, t(`meter.${meter.key}`)),
-                  h(
-                    'span',
-                    { className: 'ocq-meter-value' },
-                    `${formatUsd(meter.usedUsd)} / ${formatUsd(meter.limitUsd)}`,
-                  ),
+                  h('span', { className: 'ocq-meter-pct' }, formatPercent(meter.percent)),
                 ),
                 h(
                   'div',
                   { className: 'ocq-bar' },
                   h('div', {
-                    className: 'ocq-bar-fill',
-                    style: { width: `${Math.min(100, Math.max(0, meter.percent))}%`, background: toneOf(meter.percent) },
+                    className: 'ocq-bar-cover',
+                    style: { left: `${Math.min(100, Math.max(0, meter.percent))}%` },
                   }),
                 ),
                 h(
                   'div',
                   { className: 'ocq-meter-sub' },
-                  h('span', { className: 'ocq-meter-pct' }, formatPercent(meter.percent)),
                   h(
                     'span',
                     null,
